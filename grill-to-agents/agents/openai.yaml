@@ -1,0 +1,6 @@
+interface:
+  display_name: "Grill to Agents"
+  short_description: "分轮追问理清想法，生成可复制给其他 agent 执行的 Markdown 清单"
+  default_prompt: "用 $grill-to-agents 追问我的想法，最后整理成可直接复制给另一个 agent 执行的 Markdown 清单。"
+policy:
+  allow_implicit_invocation: false
