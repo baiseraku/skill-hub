@@ -149,3 +149,7 @@ node "$SKILL/scripts/html_to_pdf.cjs" 报告_standalone.html --out 报告.pdf \
 写文件前先读 `references/gotchas.md`，里面是每条规则背后的真实翻车记录（CJK 加粗定界符、
 `$` 被误判数学公式、按宽度分配列宽的正确与错误做法、页脚/页码策略等）。
 遇到浏览器下载失败、`PLAYWRIGHT_CHROMIUM_PATH` 之类环境问题看 `references/setup.md`。
+
+**要从 PDF 里取插图的话，先看 gotchas 第 11 条。** 出版排版里图 = 位图（图形）+ 矢量文字层
+（面板字母、坐标轴、图例、通路名）。`get_images()` / `pdfimages` 这类「提取嵌入图片」只拿位图，
+图上文字会整批静默消失，且提高分辨率或 JPEG 质量都救不回来。正确做法是按整幅图区域**渲染页面**。

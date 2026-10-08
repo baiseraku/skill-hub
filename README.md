@@ -15,8 +15,8 @@ ZCode 的 skills 装在 `~/.zcode/skills/<名字>/` 下，每个 skill 是一个
 | [grill-to-agents](./grill-to-agents/) | 追问后生成一份可复制的 Markdown 执行清单，交给其他 agent | `agents/openai.yaml`、`LICENSE`(MIT) |
 | [i-have-adhd](./i-have-adhd/) | 把输出塑造成适合 ADHD 读者：动作先行、多步编号、每轮复述状态 | `agents/gemini.toml`、`agents/openai.yaml` |
 | [lieflat-less-ai-tone](./lieflat-less-ai-tone/) | 按白名单规则改写文本里的 AI 写作痕迹，未命中的文字逐字保留 | SKILL.md |
-| [md-render](./md-render/) | 把带图带表的 markdown 长文档排成阅读版 HTML，再审、再转 A4 PDF | 4 个 `scripts/*.cjs`、`references/gotchas.md`、`references/setup.md` |
-| [paper-analyzer](./paper-analyzer/) | 把学术论文转成深度 HTML 长文（6 轮工作流、三风格、公式与 Mermaid） | `styles/` 5 份、`scripts/` 2 个、封面 prompt 文件 |
+| [md-render](./md-render/) | 把带图带表的 markdown 长文档排成阅读版 HTML，再审、再转 A4 PDF；从 PDF 取插图不丢矢量文字 | 4 个 `scripts/*.cjs`、`references/gotchas.md`、`references/setup.md` |
+| [paper-analyzer](./paper-analyzer/) | 把学术论文转成深度 HTML 长文（6 轮工作流、三风格、公式与 Mermaid），含导出插图与 standalone 交付 | `styles/` 5 份、`scripts/` 4 个、封面 prompt 文件 |
 | [paper-comic](./paper-comic/) | 用视觉图解讲清论文方法，确认范围/张数/语言/风格后才生成 | `references/base-prompt.md`、两种风格参考 |
 | [paper-deck](./paper-deck/) | 把论文/知识内容做成高真实感 AIGC 幻灯片并合成 PPTX/PDF | `references/` 5 份、`scripts/merge_deck.py` |
 | [r-code-requirements](./r-code-requirements/) | R 代码注释规范 + 强制把代码落盘到项目 .R 脚本 | SKILL.md |
@@ -74,11 +74,11 @@ ln -s ~/skill-hub/bark-notify ~/.zcode/skills/bark-notify
 
 ### md-render
 
-把带图、带表的 markdown 长文档（中文技术/科研报告最常见）排成可直接阅读的 HTML：屏幕端居中栏 + 两侧留白，图按原文位置插在段落间，表格列宽按实测写死（数值与文件名不被拆行），目录可点击；HTML 审查通过后再从同一份 HTML 转出 A4 PDF。触发说法包括「md 转 html」「报告做成网页/单文件 html」「排一下版」「顺便给一份 A4 pdf」。依赖 Node 环境：`marked` 必需，`playwright` + Chromium、`pdf-lib`、`pdfjs-dist` 分别用于测列宽、自检、转 PDF 与页码。附 4 个 `scripts/*.cjs` 与 `references/gotchas.md`、`references/setup.md`。
+把带图、带表的 markdown 长文档（中文技术/科研报告最常见）排成可直接阅读的 HTML：屏幕端居中栏 + 两侧留白，图按原文位置插在段落间，表格列宽按实测写死（数值与文件名不被拆行），目录可点击；HTML 审查通过后再从同一份 HTML 转出 A4 PDF。触发说法包括「md 转 html」「报告做成网页/单文件 html」「排一下版」「顺便给一份 A4 pdf」。依赖 Node 环境：`marked` 必需，`playwright` + Chromium、`pdf-lib`、`pdfjs-dist` 分别用于测列宽、自检、转 PDF 与页码。`references/gotchas.md` 第 11 条记的是从 PDF 取插图的坑：出版排版里图 = 位图 + 矢量文字层，「提取嵌入图片」会把面板字母、坐标轴、图例等文字整批静默丢掉，正确做法是按整幅图区域渲染页面。附 4 个 `scripts/*.cjs` 与 `references/gotchas.md`、`references/setup.md`。
 
 ### paper-analyzer
 
-把一篇学术论文转成深度 HTML 长文，目标读者觉得「比我读论文还清楚」。走 6 轮强制工作流：获取全文 → 搜索并阅读开源代码仓库 → 深度分析 → 询问风格 → 写作输出 HTML → 自我审查；提供 storytelling / academic / concise 三种写作风格，各带篇幅与结构硬标准。触发方式是给论文链接、PDF 或粘贴文本。输出模板内置 KaTeX 公式渲染与 Mermaid 图表支持。附 `styles/` 下 5 份风格与专项规范、`scripts/` 下 2 个 Python 辅助脚本及封面 prompt 文件。
+把一篇学术论文转成深度 HTML 长文，目标读者觉得「比我读论文还清楚」。走 6 轮强制工作流：获取全文 → 搜索并阅读开源代码仓库 → 深度分析 → 询问风格 → 写作输出 HTML → 自我审查；提供 storytelling / academic / concise 三种写作风格，各带篇幅与结构硬标准。触发方式是给论文链接、PDF 或粘贴文本。输出模板内置 KaTeX 公式渲染与 Mermaid 图表支持。要把论文原图嵌进 HTML 时有专设的 Round 1.5：不「提取嵌入图片」（那会静默丢掉图上的矢量文字层），改按整幅图区域渲染页面，`scripts/extract_figures.py` 固化了这套图区判定逻辑。交付口径是先写轻量 `index.html` → 在 index 上终审 → 通过后用 `scripts/inline_images.py` 转 `index_standalone.html`，最终件是 standalone。附 `styles/` 下 5 份风格与专项规范、`scripts/` 下 4 个 Python 辅助脚本及封面 prompt 文件。
 
 ### paper-comic
 

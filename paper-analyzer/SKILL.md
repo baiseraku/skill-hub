@@ -31,6 +31,37 @@ description: |
 
 **自检**：有没有完整内容？没有 → 换方式继续。
 
+### Round 1.5：导出插图（要把原图嵌进 HTML 时）⛔
+
+⚠️ **别用「提取嵌入图片」的办法取图。** 出版排版里插图 = 位图（图形本身）+ **矢量文字层**
+（面板字母 A/B/C、坐标轴标注、聚类/样本编号、图例、通路名、基因名、统计标注）。
+`get_images()`、`pdfimages` 这类提取嵌入图片的手段只拿得到位图，**图上所有文字会静默消失**，
+只剩图形。这不是清晰度问题——那些字根本不在提取出来的数据里，提高 JPEG 质量或渲染分辨率都救不回来。
+
+**正确做法**：按**整幅图的区域渲染页面**（如 PyMuPDF 的 `page.get_pixmap(clip=...)`），
+位图与矢量文字一起栅格化。区域按这样定：
+
+1. 从位图 bbox 起步；
+2. 并入**与之相交**和**紧邻其上方约 16pt 内**的文字块（面板字母常画在位图外沿上方，不在 bbox 内，漏了会切掉 A/B）；
+3. 纵向截到图注之前——以 `^Figure \d+\.` 开头文字块的 y0 作下界留 3pt 余量，否则图注会被切进图里；
+4. 四周留 2pt。
+
+**判别方法**：同一小块区域，把「嵌入位图」和「按页面渲染」两种结果各出一张对比，位图版有图形没文字即命中。
+
+**分辨率**：图在 A4 正文栏宽（176mm）铺满时，渲染 zoom 取 3.5–4 可到 250–300 DPI。
+
+**直接用现成脚本**（上述逻辑已固化，含图注边界与面板字母的处理）：
+
+```bash
+python3 ~/.agents/skills/paper-analyzer/scripts/extract_figures.py 论文.pdf ./assets/figures \
+  --pages 4:fig1,6:fig2,8:fig3 --zoom 3.6
+```
+
+不传 `--pages` 时自动探测含位图的页。输出目录会附一份 `_figmeta.json` 记录每张图的图区、像素与宽高比。
+
+⚠️ **图区改动会改变宽高比，进而改变分页。** 如果下游还要出 PDF（如交给 md-render），
+重出图之后必须重算目录页码，不能沿用旧的映射。
+
 ### Round 2：搜索开源代码 ⛔
 
 1. 从论文中提取代码仓库链接（通常在页脚或 Introduction 末）
@@ -62,9 +93,41 @@ description: |
 
 按选定风格的要求写，输出完整HTML。模板见下文。
 
+#### 产出规格（硬要求）⛔
+
+**交付物是 standalone 单文件版；但不要一开始就写内嵌版。顺序是：先出轻量 index → 在 index 上终审 → 通过后再转 standalone。**
+
+**第一步：写 `index.html`（轻量、可审）。** 图片按相对路径引用（`<img src="assets/figures/fig1.jpg">`），
+公式与图表用模板里的 CDN `<script>`。这样文件只有几十 KB，改一句话、调个措辞都很轻，也方便在浏览器里来回审。
+
+**第二步：在 index 上做终审。** 按 Round 6 的清单逐项过，并在浏览器里实际打开看渲染。
+**审查只发生在 index 上**——不要对着几百 KB 的 base64 去核对内容。
+
+**第三步：终审通过后再转 standalone。** 一条命令：
+
+```bash
+python3 ~/.agents/skills/paper-analyzer/scripts/inline_images.py index.html
+# → 生成 index_standalone.html（图片全部 base64 内嵌）
+
+# 只想确认是否已达标：退出码 0 = 图片全部内嵌，2 = 还有外链
+python3 ~/.agents/skills/paper-analyzer/scripts/inline_images.py index.html --check
+```
+
+**交付的是 `index_standalone.html`，不是 `index.html`。** 两个文件都在没问题——index 留作可维护的源
+（以后要改就改它，再跑一次第三步），standalone 是拿去分享的那个。但**交付时要说清哪个是最终件**，
+别让人误取 index 发出去（分享时只发 HTML、忘了发图目录，接收方看到的就是一整套裂图）。
+
+- 内嵌后单文件通常 5–10 MB（8 张论文插图 base64 后膨胀约 1/3）。这是可接受的代价，不要为压体积退回外链。要压就压图片本身的质量或宽度（JPEG q≈88、宽 ≈1700px），不要改成引用。
+- **不要用 `--in-place`**：那会把 index.html 本身变成几 MB 的重件，之后每次改措辞都要在这个巨型文件上定位，得不偿失。
+
+**CDN 外链怎么办。** 模板里的 KaTeX 与 Mermaid 是 CDN 加载的 `<script>`，在线打开正常。图片内嵌是硬要求；公式与图表要做到完全离线可用，需在渲染后把**渲染结果**烘焙成静态标记再去掉这些 script（用无头浏览器跑一次）。这一项按需处理，但**交付时必须向用户说明还剩哪些外链**，不要让人以为断网也能完整显示。
+
 ### Round 6：自我审查 ⛔
 
 逐项检查，不通过则修改直到通过。
+
+**审查对象是 `index.html`**（轻量版），在浏览器里实际打开看。审查通过后才执行 Round 5 第三步转 standalone；
+转了 standalone 若又改动内容，必须回到 index 改、重新审查、再转一次，不要直接编辑 standalone。
 
 ---
 
@@ -313,6 +376,12 @@ th{background:#f9fafb;font-weight:600}
 - [ ] 指出局限 ≥ 2 处（至少 1 处是作者自述的）？
 - [ ] HTML 格式完整，可在浏览器打开？
 - [ ] 无 AI 套话（"深入探讨""至关重要""值得注意的是"）？
+- [ ] **交付的是 standalone 单文件版？图片全部 base64 内嵌，无 `<img src="相对路径">`？**
+- [ ] **终审是在 `index.html`（轻量版）上做的，并在浏览器里实际打开看过？**
+- [ ] **审过之后才转的 standalone，且交付时说明了哪个是最终件？**
+      （`inline_images.py index.html --check` 对 index 返回 2、对 standalone 返回 0 是正常的：
+      index 有外链、standalone 必须没有）
+- [ ] **残留的 CDN 外链已向用户说明？**（还有哪些、离线时会失效什么）
 
 ### storytelling 专属
 - [ ] 有钩子开头？
@@ -344,4 +413,6 @@ th{background:#f9fafb;font-weight:600}
 - `styles/concise.md` — 精炼型补充规范
 - `styles/with-formulas.md` — 公式详解
 - `styles/with-code.md` — 代码分析规范
-- `scripts/generate_html.py` — HTML生成辅助脚本
+- `scripts/generate_html.py` — HTML生成辅助脚本（markdown → HTML，含 base64 内嵌图片）
+- `scripts/inline_images.py` — 把已写好的 HTML 转成 standalone 单文件版（图片全部 base64 内嵌），
+  带 `--check` 可判断是否已是单文件、`--in-place` 就地覆盖并备份
