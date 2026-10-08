@@ -1,6 +1,6 @@
 # skill-hub
 
-我在用的 ZCode（一个编码 agent CLI）自定义 skills 合集，共 17 个。覆盖论文阅读与汇报（解读长文、方法图解、逐页生图幻灯片）、markdown 报告排版、单细胞 RNA-seq 分析、GitHub 上传、手机推送提醒、以及一批约束 agent 行为的写作/流程规范。
+我在用的 ZCode（一个编码 agent CLI）自定义 skills 合集，共 15 个。覆盖论文阅读（深度解读长文）、markdown 报告排版、单细胞 RNA-seq 分析、GitHub 上传、手机推送提醒、子代理模型与思考档位设置、以及一批约束 agent 行为的写作/流程规范。
 
 ZCode 的 skills 装在 `~/.zcode/skills/<名字>/` 下，每个 skill 是一个目录，核心是一份 `SKILL.md`：frontmatter 里是 `name` 与 `description`（描述同时决定 agent 何时自动触发），正文是给 agent 看的操作说明；部分 skill 还带 `scripts/`、`references/`、`assets/`、`styles/` 等辅助文件。
 
@@ -17,8 +17,6 @@ ZCode 的 skills 装在 `~/.zcode/skills/<名字>/` 下，每个 skill 是一个
 | [lieflat-less-ai-tone](./lieflat-less-ai-tone/) | 按白名单规则改写文本里的 AI 写作痕迹，未命中的文字逐字保留 | SKILL.md |
 | [md-render](./md-render/) | 把带图带表的 markdown 长文档排成阅读版 HTML，再审、再转 A4 PDF；从 PDF 取插图不丢矢量文字 | 4 个 `scripts/*.cjs`、`references/gotchas.md`、`references/setup.md` |
 | [paper-analyzer](./paper-analyzer/) | 把学术论文转成深度 HTML 长文（6 轮工作流、三风格、公式与 Mermaid），含导出插图与 standalone 交付 | `styles/` 5 份、`scripts/` 4 个、封面 prompt 文件 |
-| [paper-comic](./paper-comic/) | 用视觉图解讲清论文方法，确认范围/张数/语言/风格后才生成 | `references/base-prompt.md`、两种风格参考 |
-| [paper-deck](./paper-deck/) | 把论文/知识内容做成高真实感 AIGC 幻灯片并合成 PPTX/PDF | `references/` 5 份、`scripts/merge_deck.py` |
 | [r-code-requirements](./r-code-requirements/) | R 代码注释规范 + 强制把代码落盘到项目 .R 脚本 | SKILL.md |
 | [research-report](./research-report/) | 把项目当前研究进度总结成 markdown 报告，落在项目根 `report/` | `scripts/pdf2png.sh` |
 | [seurat-qc-annotate](./seurat-qc-annotate/) | 单细胞 RNA-seq 流水线：QC → 批次矫正聚类 → 细胞类型注释 | SKILL.md |
@@ -79,14 +77,6 @@ ln -s ~/skill-hub/bark-notify ~/.zcode/skills/bark-notify
 ### paper-analyzer
 
 把一篇学术论文转成深度 HTML 长文，目标读者觉得「比我读论文还清楚」。走 6 轮强制工作流：获取全文 → 搜索并阅读开源代码仓库 → 深度分析 → 询问风格 → 写作输出 HTML → 自我审查；提供 storytelling / academic / concise 三种写作风格，各带篇幅与结构硬标准。触发方式是给论文链接、PDF 或粘贴文本。输出模板内置 KaTeX 公式渲染与 Mermaid 图表支持。要把论文原图嵌进 HTML 时有专设的 Round 1.5：不「提取嵌入图片」（那会静默丢掉图上的矢量文字层），改按整幅图区域渲染页面，`scripts/extract_figures.py` 固化了这套图区判定逻辑。交付口径是先写轻量 `index.html` → 在 index 上终审 → 通过后用 `scripts/inline_images.py` 转 `index_standalone.html`，最终件是 standalone。附 `styles/` 下 5 份风格与专项规范、`scripts/` 下 4 个 Python 辅助脚本及封面 prompt 文件。
-
-### paper-comic
-
-把论文的核心方法用视觉图解彻底讲清楚——只画方法流程、核心机制和关键结果，不画相关工作与背景。默认不直接生成图片：先读论文、给出封面/概述图/机制细节图的推荐方案，向用户确认语言、范围、张数、视觉风格和用途后才开始生成（风格不等于范围授权）。提供 `sketchnote`（温暖科研笔记风）与 `paper-figure`（论文框架图风）两种风格，生成张数最少 1 张、最多 10 张。生图后端在运行时按环境自动检测，不写死 API。附 `references/base-prompt.md` 与两套风格参考。
-
-### paper-deck
-
-把论文、技术文章或知识内容做成「看起来真的被设计过」的高真实感幻灯片。路线是 raster-first AIGC：先做 deck brief 与逐页叙事，为每页写 prompt，用生图模型生成 16:9 slide image，最后合成 PPTX/PDF 并保留 prompts 作为返修源文件。硬性要求是每页主图必须来自真实生图后端，明确禁止用 Python/Pillow、SVG、HTML/CSS、Canvas 等本地绘图冒充「生图页」；没有可用生图后端就停下说明。触发说法包括「论文PPT」「逐页生图PPT」「不像AI的PPT」。附 `references/` 下 5 份规范与 `scripts/merge_deck.py`。
 
 ### r-code-requirements
 
