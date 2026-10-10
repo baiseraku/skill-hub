@@ -70,14 +70,21 @@ for pno, name in targets:
         continue
     imgbox = page.get_image_bbox(imgs[0])
 
-    # 图区 = 位图 bbox ∪ 与之相交/紧邻上方 16pt 内的文字块（面板字母常画在位图外沿上方）
+    # 图区 = 位图 bbox ∪ 与之相交/紧邻外沿的文字块。
+    # 面板字母可能画在正上方，也可能贴左/右外沿（实测 Neurogastroenterol Motil：
+    # 字母 A/B/D/E/F 画在 bbox 左侧 2–8pt），漏了字会被裁掉、只剩图形。
     clip = fitz.Rect(imgbox)
     for x0, y0, x1, y1, txt, *_ in page.get_text('blocks'):
         r = fitz.Rect(x0, y0, x1, y1)
         intersects = r.intersects(imgbox)
         above = (y1 <= imgbox.y0 + 1 and y1 >= imgbox.y0 - 16
                  and x1 > imgbox.x0 and x0 < imgbox.x1)
-        if intersects or above:
+        is_panel_letter = bool(re.fullmatch(r'[A-H]\.?', txt.strip()))
+        side = (is_panel_letter
+                and y1 > imgbox.y0 and y0 < imgbox.y1
+                and ((imgbox.x0 - 16 <= x1 <= imgbox.x0 + 1)
+                     or (imgbox.x1 - 1 <= x0 <= imgbox.x1 + 16)))
+        if intersects or above or side:
             clip |= r
     clip = fitz.Rect(clip.x0 - 2, min(clip.y0, imgbox.y0) - 2,
                      clip.x1 + 2, min(clip.y1, cap_y - 3))

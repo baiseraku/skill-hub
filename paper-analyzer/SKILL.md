@@ -42,7 +42,8 @@ description: |
 位图与矢量文字一起栅格化。区域按这样定：
 
 1. 从位图 bbox 起步；
-2. 并入**与之相交**和**紧邻其上方约 16pt 内**的文字块（面板字母常画在位图外沿上方，不在 bbox 内，漏了会切掉 A/B）；
+2. 并入**与之相交**、**紧邻其上方约 16pt 内**、以及**贴左/右外沿 16pt 内的单字母（A–H）面板标签**
+   的文字块（面板字母可能画在上方也可能在侧边，不在 bbox 内，漏了会切掉 A/B）；
 3. 纵向截到图注之前——以 `^Figure \d+\.` 开头文字块的 y0 作下界留 3pt 余量，否则图注会被切进图里；
 4. 四周留 2pt。
 
@@ -100,7 +101,7 @@ python3 ~/.agents/skills/paper-analyzer/scripts/extract_figures.py 论文.pdf ./
 **第一步：写 `index.html`（轻量、可审）。** 图片按相对路径引用（`<img src="assets/figures/fig1.jpg">`），
 公式与图表用模板里的 CDN `<script>`。这样文件只有几十 KB，改一句话、调个措辞都很轻，也方便在浏览器里来回审。
 
-**第二步：在 index 上做终审。** 按 Round 6 的清单逐项过，并在浏览器里实际打开看渲染。
+**第二步：在 index 上做终审。** 按 Round 6 的清单逐项过，并按 **6.1 渲染验证（固定流程）** 在浏览器里实际打开看渲染。
 **审查只发生在 index 上**——不要对着几百 KB 的 base64 去核对内容。
 
 **第三步：终审通过后再转 standalone。** 一条命令：
@@ -128,6 +129,65 @@ python3 ~/.agents/skills/paper-analyzer/scripts/inline_images.py index.html --ch
 
 **审查对象是 `index.html`**（轻量版），在浏览器里实际打开看。审查通过后才执行 Round 5 第三步转 standalone；
 转了 standalone 若又改动内容，必须回到 index 改、重新审查、再转一次，不要直接编辑 standalone。
+
+#### 6.1 渲染验证（固定流程）⛔
+
+⛔ **禁止为了验证而下载浏览器。** 先探测复用本机已有 Chromium；失败也不要退回 IAB / QuickLook
+（验证方式见下方"不可靠清单"），而是与用户确认后再决定是否下载。
+
+**准备（每个项目一次）：** 项目内 venv；pip 默认走本地缓存，重复安装不会重新下载。
+
+```bash
+python3 -m venv .cache/venv
+.cache/venv/bin/pip install pymupdf playwright   # pymupdf 出图用（Round 1.5），playwright 渲染用
+```
+
+**执行：** 用本 skill 自带脚本，**放在 `file://` 下直开 index.html**——headless Chromium 能正常加载
+相对路径图片与 CDN 资源，不需要起本地 HTTP 服务器（起服务器可能被审批拦截）。
+
+```bash
+.cache/venv/bin/python ~/.agents/skills/paper-analyzer/scripts/verify_render.py .
+# 自动对照 index.html 核对公式数/图片数，输出渲染数据 + build/shots/segNN.jpg 分段截图
+# 退出码 0 = 数据全部达标；非 0 = 回 index.html 修改后重跑
+```
+
+Chromium 复用顺序（脚本已内置，不下载）：`CHROMIUM_PATH` 环境变量 → macOS
+`~/Library/Caches/ms-playwright/` 下的 headless shell / Chromium.app → Linux `~/.cache/ms-playwright/`。
+
+**数据达标后逐段目视过一遍截图**（图片/公式/表格/分栏）——这是"在浏览器里实际打开看过"的证据。
+
+⛔ **以下方式已验证不可靠，不要改用：**
+
+- **ZCode 内置浏览器（IAB）截图**：`surface preparation timed out`（3s 上限）常态出现，
+  把页面缩短到一屏也照样超时——截图功能整体不可用。
+- **qlmanage（系统 QuickLook）**：只做静态渲染——CSS 生效，但**不执行 JS**（公式显示为 `$$` 源码）、
+  **不加载相对路径图片**，只能看排版，验证不了公式和图片。
+- **整页 `clip` 截图**：页面超过 **16384px** 会被 Chromium 拒绝（`Clipped area is either empty
+  or outside the resulting image`）→ 必须滚动 + 视口截图（verify_render.py 已处理）。
+- **`playwright install chromium`**：默认 CDN 下载常极慢或卡死（实测 15 分钟 0 进度）。
+  本机确实没有可复用二进制时，先告知用户体积（150MB+）再决定。
+
+**止损原则**：任何渲染手段先做一次冒烟（30 秒内能否出结果），失败立即换路径，不要对同一失败方式
+反复重试——排查 IAB 截图曾空耗四轮。
+
+### Round 7：清理（交付后的固定动作）⛔
+
+**验证通过、standalone 已生成、交付说明已发出后，必须清掉本次流程的全部过程产物，
+只保留交付物与其源文件。** 删除一律走系统废纸篓（不用 `rm`）；截图等"审查证据"若用户可能想留，
+删除前先告知落点。
+
+**删除（存在才删）：**
+- 渲染验证截图目录（`build/shots/`）及任何渲染测试页、临时 HTML
+- 渲染/出图用的 venv（项目 `.cache/venv` 或 `$TMPDIR` 下的临时环境）
+- 残缺/中断的浏览器下载缓存（如 `playwright install` 中断留下的目录）
+- 一次性辅助脚本（复制到项目里的渲染脚本等；本 skill 自带的脚本不算项目产物）
+
+**保留：**
+- 交付件 `index_standalone.html` 与源文件 `index.html`、`README.md`
+- `assets/figures/`（index.html 引用它，属于源文件的一部分；standalone 已内嵌全部图片）
+
+清理后在 README 记录：交付物清单、验证结论、清理日期。项目里不应残留任何可再生的中间产物——
+下一个人打开目录时，看到的应该只有交付物、源文件和说明。
 
 ---
 
@@ -382,6 +442,8 @@ th{background:#f9fafb;font-weight:600}
       （`inline_images.py index.html --check` 对 index 返回 2、对 standalone 返回 0 是正常的：
       index 有外链、standalone 必须没有）
 - [ ] **残留的 CDN 外链已向用户说明？**（还有哪些、离线时会失效什么）
+- [ ] **6.1 渲染验证已跑过，数据达标（退出码 0）且截图逐段看过？**
+- [ ] **Round 7 清理已执行？**（过程产物已移废纸篓，目录只剩交付物/源文件/说明）
 
 ### storytelling 专属
 - [ ] 有钩子开头？
@@ -414,5 +476,8 @@ th{background:#f9fafb;font-weight:600}
 - `styles/with-formulas.md` — 公式详解
 - `styles/with-code.md` — 代码分析规范
 - `scripts/generate_html.py` — HTML生成辅助脚本（markdown → HTML，含 base64 内嵌图片）
+- `scripts/verify_render.py` — 渲染验证（固定流程，见 6.1）：复用本机 Chromium 打开 index.html，
+  自动对照核对公式数/图片数并检查溢出与 `$` 残留，输出 `build/shots/` 分段截图；找不到本机
+  Chromium 时直接报错退出（不下载）
 - `scripts/inline_images.py` — 把已写好的 HTML 转成 standalone 单文件版（图片全部 base64 内嵌），
   带 `--check` 可判断是否已是单文件、`--in-place` 就地覆盖并备份
